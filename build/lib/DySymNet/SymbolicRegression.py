@@ -221,11 +221,12 @@ class SymboliRegression:
                 print("Reward: ", reward)
                 print('\n')
 
-                f1.write('{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\t\t{}\t\t{}\t\t{}\n'.format(error, relative_error, reward, R2, eq, num_layers,
-                                                                                                 num_func_layer,
-                                                                                                 funcs_per_layer_name))
+                f1.write('{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\t\t{}\t\t{}\t\t{}\n'.format(
+                    error, relative_error, reward, R2, eq, num_layers, num_func_layer, funcs_per_layer_name
+                ))
 
-                if R2 > 0.99:
+                # Updated early stopping condition
+                if reward >= 0.99 and R2 >= 0.99 and error <= 1e-10 and relative_error <= 1e-4:
                     print("~ Early Stopping Met ~")
                     print("Best expression: ", eq)
                     print("Best reward:     ", reward)
@@ -264,8 +265,10 @@ class SymboliRegression:
 
             # log the best expression of a batch
             f2.write(
-                '{}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\n'.format(i, relative_error_list[np.argmax(r2.cpu())], max(rewards).item(), max(r2).item(),
-                                                                  best_r2_expression))
+                '{}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\n'.format(
+                    i, relative_error_list[np.argmax(r2.cpu())], max(rewards).item(), max(r2).item(), best_r2_expression
+                )
+            )
 
             # save the best expression from the beginning to now
             if max(r2) > best_performance:
@@ -310,7 +313,6 @@ class SymboliRegression:
 
         # plot reward curve
         if self.config.plot_reward:
-            # plt.plot([i + 1 for i in range(len(epoch_best_rewards))], epoch_best_rewards)  # best reward of full epoch
             plt.plot([i + 1 for i in range(len(epoch_mean_rewards))], epoch_mean_rewards)  # mean reward of full epoch
             plt.xlabel('Epoch')
             plt.ylabel('Reward')
@@ -322,6 +324,13 @@ class SymboliRegression:
             return eq, R2, error, relative_error
         else:
             return best_expression, best_performance.item(), 1 / max(rewards).item() - 1, best_relative_error
+
+
+
+
+
+
+        
 
     def bfgs(self, eq, X, y, n_restarts):
         variable = self.vars_name

@@ -177,12 +177,12 @@ class SymboliRegression:
         # log the expressions of all epochs
         f1 = open(os.path.join(self.results_dir, 'eq_{}_all.txt'.format(self.func_name)), 'a')
         f1.write('\n{}\t\t{}\n'.format(self.now_time, self.func_name))
-        f1.write('{}\t\tReward\t\tR2\t\tMSE\t\tRelative Error\t\tExpression\t\tnum_layers\t\tnum_funcs_layer\t\tfuncs_per_layer\n'.format(self.reward_type))
+        f1.write('{}\t\tReward\t\tR2\t\tExpression\t\tnum_layers\t\tnum_funcs_layer\t\tfuncs_per_layer\n'.format(self.reward_type))
 
         # log the best expressions of each epoch
         f2 = open(os.path.join(self.results_dir, 'eq_{}_summary.txt'.format(self.func_name)), 'a')
         f2.write('\n{}\t\t{}\n'.format(self.now_time, self.func_name))
-        f2.write('Epoch\t\tReward\t\tR2\t\tMSE\t\tRelative Error\t\tExpression\n')
+        f2.write('Epoch\t\tReward\t\tR2\t\tExpression\n')
 
         if self.optimizer == "Adam":
             optimizer = torch.optim.Adam(self.agent.parameters(), lr=self.config.learning_rate1)
@@ -194,7 +194,6 @@ class SymboliRegression:
             expressions = []
             rewards = []
             r2 = []
-            mse_list = []
             relative_error_list = []
             batch_log_probs = torch.zeros([self.batch_size], device=self.device)
             batch_entropies = torch.zeros([self.batch_size], device=self.device)
@@ -202,7 +201,7 @@ class SymboliRegression:
             j = 0
             while j < self.batch_size:
                 error, R2, eq, log_probs, entropies, num_layers, num_func_layer, funcs_per_layer_name = self.play_episodes()  # play an episode
-                # if the expression is invalid, e.g., a constant or None, resample the structure of the symbolic network
+                # if the expression is invalid, e.g. a constant or None, resample the structure of the symbolic network
                 if 'x_1' not in str(eq) or eq is None:
                     R2 = 0.0
                 if 'x_1' in str(eq) and self.refine_constants:
@@ -211,28 +210,27 @@ class SymboliRegression:
                     R2 = res['R2']
                     error = res['error']
                     relative_error = res['relative error']
-                    mse = error  # In this case, MSE is equivalent to `error`
                 else:
                     relative_error = 100
-                    mse = 10000
 
-                reward = 1 / (1 + mse)
+                reward = 1 / (1 + error)
                 print("Final expression: ", eq)
                 print("Test R2: ", R2)
-                print("Test error (MSE): ", mse)
+                print("Test error: ", error)
                 print("Relative error: ", relative_error)
                 print("Reward: ", reward)
                 print('\n')
 
-                f1.write('{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\t\t{}\t\t{}\t\t{}\n'.format(
-                    mse, relative_error, reward, R2, eq, num_layers, num_func_layer, funcs_per_layer_name))
+                f1.write('{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\t\t{}\t\t{}\t\t{}\n'.format(
+                    error, relative_error, reward, R2, eq, num_layers, num_func_layer, funcs_per_layer_name
+                ))
 
-                # Stopping criteria: R2 >= 0.99, reward >= 0.99, MSE <= 1e-10, relative error <= 1e-4
-                if R2 >= 0.99 and reward >= 0.99 and mse <= 1e-10 and relative_error <= 1e-4:
+                # Updated early stopping condition
+                if reward >= 0.99 and R2 >= 0.99 and error <= 1e-10 and relative_error <= 1e-4:
                     print("~ Early Stopping Met ~")
                     print("Best expression: ", eq)
                     print("Best reward:     ", reward)
-                    print(f"{self.config.reward_type} error (MSE): ", mse)
+                    print(f"{self.config.reward_type} error:      ", error)
                     print("Relative error:  ", relative_error)
                     early_stopping = True
                     break
@@ -242,12 +240,11 @@ class SymboliRegression:
                 expressions.append(eq)
                 rewards.append(reward)
                 r2.append(R2)
-                mse_list.append(mse)
                 relative_error_list.append(relative_error)
                 j += 1
 
             if early_stopping:
-                f2.write('{}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\n'.format(i, reward, R2, mse, relative_error, eq))
+                f2.write('{}\t\t{:.8f}\t\t{:.8f}\t\t{}\n'.format(i, reward, R2, eq))
                 break
 
             # a batch expressions
@@ -268,8 +265,10 @@ class SymboliRegression:
 
             # log the best expression of a batch
             f2.write(
-                '{}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\n'.format(
-                    i, relative_error_list[np.argmax(r2.cpu())], max(rewards).item(), max(r2).item(), best_r2_expression))
+                '{}\t\t{:.8f}\t\t{:.8f}\t\t{:.8f}\t\t{}\n'.format(
+                    i, relative_error_list[np.argmax(r2.cpu())], max(rewards).item(), max(r2).item(), best_r2_expression
+                )
+            )
 
             # save the best expression from the beginning to now
             if max(r2) > best_performance:
@@ -322,11 +321,9 @@ class SymboliRegression:
             plt.savefig(os.path.join(self.results_dir, "reward_{}_{}.png".format(self.func_name, self.now_time)))
 
         if early_stopping:
-            return eq, R2, mse, relative_error
+            return eq, R2, error, relative_error
         else:
             return best_expression, best_performance.item(), 1 / max(rewards).item() - 1, best_relative_error
-        
-
 
 
 
